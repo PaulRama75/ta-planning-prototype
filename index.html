@@ -58,9 +58,9 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; }
 img { max-width: 100%; }
 [hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; }
 a { color: var(--link); }
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 h1 { font-family: var(--display); font-size: 26px; font-weight: 600; }
@@ -308,6 +308,29 @@ const HOLD = ['Drawings needed', 'Vendor quote', 'Engineering review', 'Material
 const CRAFTS = [['PIP', 'Pipefitter'], ['BMR', 'Boilermaker'], ['ELE', 'Electrician'], ['INS', 'Inspector'], ['RIG', 'Rigger'], ['SCF', 'Scaffold builder'], ['WLD', 'Welder'], ['LAB', 'Laborer']].map(([value, n]) => ({ value, label: `${value} · ${n}` }));
 const TOOLS = ['Crane 50 t', 'Bundle extractor', 'Hydro test pump', 'Torque wrench set', 'Man lift 60 ft', 'Air mover'];
 const PARTS = [['work_steps', 'Work steps'], ['materials', 'Materials'], ['tools', 'Tools'], ['overall', 'Overall']];
+// code lists behind the job detail fields (sample values)
+const REASONS = [['REG', 'Regulatory', 'Class 1'], ['INF', 'Inspection finding', 'Class 1'], ['REL', 'Reliability', 'Class 2'], ['OPP', 'Opportunity', 'Class 3']].map(([value, n, cls]) => ({ value, label: `${value} · ${n}`, cls }));
+const SIZES = [['1', 5], ['2', 10], ['3', 15], ['4', 20]].map(([value, hrs]) => ({ value, label: `${value} · ${hrs} planning h`, hrs }));
+const AREAS = ['GCP.U100', 'GCP.U200', 'GCP.U300', 'GCP.UTIL'];
+const DELAYS = ['Drawings needed', 'Isometrics needed', 'Spec sheet needed', 'Vendor quote needed', 'Engineering review'];
+const REQS = [['ENG', 'Engineering needed'], ['FAB', 'Fabrication required'], ['SCF', 'Scaffolding needed'], ['INR', 'Insulation removal needed'], ['VSE', 'Vessel entry needed'], ['TRQ', 'Torquing needed']];
+const VALVE_TYPES = ['Ball', 'Gate', 'Globe', 'Check', 'Butterfly', 'Control'];
+const NPS = ['1/2"', '3/4"', '1"', '2"', '3"', '4"', '6"', '8"', '10"', '12"', '24"'];
+const WELD_TYPES = ['Butt weld', 'Socket weld', 'Fillet weld', 'Seal weld'];
+const INS_SPECS = ['Hot service, calcium silicate', 'Cold service, cellular glass', 'Personnel protection', 'Paint system A'];
+const INS_REASONS = ['Insulation', 'Refractory', 'Painting', 'Electric tracing', 'Steam tracing', 'Hazard: lead paint', 'Hazard: asbestos'];
+const BOM_PHASES = ['Blinding', 'Final make-up', 'Hydrotest', 'Unspecified'];
+const DETAIL_DEFAULTS = () => ({
+  reason: '', size: '', estHrs: null, area: '', originator: '', notification: '', created: '2026-10-05', createdBy: 'SAP import',
+  scope: 'Turnaround', wbs: '', floc: '', pid: '', lineNo: '', riskIndex: '', estCost: null, lockGroup: '', moc: '', awr: '', changeReq: '',
+  capital: false, tagged: false, pkgReady: false, issued: false, planStart: '', planDone: '', details: '', devNotes: '',
+  delays: [], delayOther: '', reqs: {}, safetyRequired: false, safetyNeeds: '',
+  matOrdered: false, matReceived: false, matBagged: false, vendor: '', vendorContact: '', matNotes: '',
+  toolsRequired: true, criticalLift: false, liftPlan: false, opUnit: false, obstructions: false, liftReq: '', toolSafety: '',
+  scaffoldRequired: false, insulationRequired: false, insLocation: '', insSafety: '', insRemarks: '',
+  scaffolds: [], insulation: [], valves: [], welds: [],
+  sap: { order_type: 'PM02', priority: '', main_work_ctr: '', planner_group: '', planning_plant: '', revision: 'R27', basic_start: '2027-03-01', basic_finish: '2027-03-10', system_status: 'REL', user_status: '' },
+});
 const LEVELS = [
   ['admin', 'Admin', 'Everything: users, turnarounds, setup and code lists, deleting jobs, approving reviews, undoing imports.'],
   ['planner', 'Planner', 'Plans jobs: creates and edits jobs and their tasks, holds, submits for review, imports and exports.'],
@@ -319,7 +342,7 @@ let nextId = 1;
 const step = (no, name, dur, crafts = [], tools = []) => ({ id: nextId++, no, name, dur, crafts: crafts.map(([craft, d, crew]) => ({ id: nextId++, craft, dur: d, crew })), tools: tools.map(([tool, qty, d]) => ({ id: nextId++, tool, qty, dur: d })) });
 const mat = (desc, qty, uom, status) => ({ id: nextId++, desc, qty, uom, status });
 function job(ta, no, wo, desc, stage, planner, unit, prio, steps, materials, docs, extra = {}) {
-  return { id: nextId++, ta, no, wo, desc, stage, planner, unit, prio, steps, materials, docs, hold: null, reviews: {}, events: [{ who: 'SAP import', what: 'job created', at: '2 weeks ago' }], ...extra };
+  return { id: nextId++, ta, no, wo, desc, stage, planner, unit, prio, steps, materials, docs, hold: null, reviews: {}, events: [{ who: 'SAP import', what: 'job created', at: '2 weeks ago' }], ...DETAIL_DEFAULTS(), ...extra };
 }
 const JOBS = [
   job('u100', 'J-1001', '41007302', 'E-101 exchanger: pull bundle, clean, hydro test', 'Planning', 'Planner A', 'U-100', '1', [
@@ -354,6 +377,20 @@ const JOBS = [
     step('0010', 'Replace mechanical seal', 6, [['PIP', 6, 2]]),
   ], [mat('Mechanical seal cartridge', 1, 'EA', 'Ordered')], { required: 1, have: 1 }),
 ];
+// filled-in details on the first sample job, so every section shows something
+Object.assign(JOBS[0], {
+  reason: 'REL', size: '2', area: 'GCP.U100', originator: 'Requester A', notification: '10045501', wbs: 'EXE · Exchangers', floc: 'GCP-U100-E-101', pid: 'P&ID-100-012',
+  details: 'Pull the bundle, hydroblast tube side, hydro test at 1.5 × design pressure, reinstall with new gaskets.', devNotes: 'Crane access from the north road.',
+  delays: ['Vendor quote needed'], reqs: { FAB: { lf: 40, moc: 'MOC-2027-014' }, SCF: {} }, matOrdered: true, vendor: 'Sample Heat Transfer Co.',
+  criticalLift: true, liftPlan: true, liftReq: 'Bundle approx. 14 t; 50 t crane, 30 m radius.', scaffoldRequired: true, insulationRequired: true, insLocation: 'Channel and shell flanges',
+  scaffolds: [{ id: nextId++, location: 'Channel end, north side', height: 12, length: 8, width: 6, levels: '2', access: 'Ladder', needed: '2027-03-12' }],
+  insulation: [{ id: nextId++, spec: INS_SPECS[0], reason: 'Insulation', qty: 2 }, { id: nextId++, spec: INS_SPECS[3], reason: 'Hazard: lead paint', qty: 1 }],
+  valves: [{ id: nextId++, type: 'Gate', size: '2"', qty: 2 }], welds: [],
+  sap: { ...JOBS[0].sap, priority: '1', main_work_ctr: 'MECH-01', planner_group: 'P10', planning_plant: '1000' },
+});
+JOBS[0].materials.forEach((m, i) => Object.assign(m, { phase: i ? 'Final make-up' : 'Blinding', forStep: i ? '0040' : '0010', doNotOrder: false }));
+Object.assign(JOBS[1], { reason: 'INF', size: '1', area: 'GCP.U200', originator: 'Requester B', delays: ['Drawings needed'], reqs: { VSE: {} }, safetyRequired: true, safetyNeeds: 'Confined space, rescue plan and breathing air.' });
+Object.assign(JOBS[2], { reason: 'REG', size: '1', area: 'GCP.U100' });
 
 // readiness, the way the module scores it: work steps (exist / durations / man-hours), materials (ready lines, 90 % cap), documents
 const mhStep = (s) => s.crafts.reduce((t, c) => t + (Number(c.dur) || 0) * (Number(c.crew) || 0), 0);
@@ -363,8 +400,12 @@ function readiness(j) {
   const steps = !live.length ? 0 : 0.4 + (live.every((s) => Number(s.dur) > 0) ? 0.3 : 0) + (live.every((s) => mhStep(s) > 0) ? 0.3 : 0);
   const mats = !j.materials.length ? 0 : Math.min(0.9, j.materials.filter((m) => m.status === 'Received').length / j.materials.length);
   const docs = j.docs.required ? Math.min(1, j.docs.have / j.docs.required) : 1;
-  return { steps, mats, docs, all: (steps + mats + docs) / 3, mh: live.reduce((t, s) => t + mhStep(s), 0), rental: live.reduce((t, s) => t + rentalStep(s), 0) };
+  const all = (steps + mats + docs) / 3;
+  // planning hours: own estimate, else the hours of the job size; earned = planning hours × readiness
+  const planHrs = j.estHrs != null && j.estHrs !== '' ? Number(j.estHrs) : ((SIZES.find((s) => s.value === j.size) || {}).hrs || 0);
+  return { steps, mats, docs, all, planHrs, earned: Math.round(planHrs * all * 100) / 100, mh: live.reduce((t, s) => t + mhStep(s), 0), rental: live.reduce((t, s) => t + rentalStep(s), 0) };
 }
+const priorityClass = (j) => (REASONS.find((r) => r.value === j.reason) || {}).cls || '—';
 
 // ------------------------------------------------------------------ state
 const S = { user: null, ta: 'u100', view: 'dashboard', jobId: null, tab: 'steps', regFilter: { q: '', stage: '', planner: '' }, scope: 'ta', imports: [], preview: null, reviewJob: null,
@@ -478,7 +519,7 @@ function register(out) {
   draw();
 }
 function stageChip(s) { return h('span', { class: `chip ${s === 'Package Ready' ? 'navy' : s === 'Planned' ? 'green' : s === 'Planning' ? 'blue' : ''}` }, s); }
-function openJob(id) { S.jobId = id; S.tab = 'steps'; S.view = 'register'; render(); window.scrollTo(0, 0); }
+function openJob(id) { S.jobId = id; S.tab = 'details'; S.view = 'register'; render(); window.scrollTo(0, 0); }
 async function newJob() {
   const v = await dialog('New job', [{ name: 'no', label: 'Job no.', required: true }, { name: 'wo', label: 'Work order' }, { name: 'desc', label: 'Description', wide: true, required: true },
     { name: 'stage', label: 'Stage', options: STAGES, value: 'New' }, { name: 'planner', label: 'Planner', options: PLANNERS, value: PLANNERS[0] }, { name: 'unit', label: 'Unit', options: UNITS, value: UNITS[0] }], 'Create job');
@@ -492,7 +533,7 @@ async function newJob() {
 // ------------------------------------------------------------------ job page
 function jobPage(out) {
   const j = JOBS.find((x) => x.id === S.jobId); const r = readiness(j);
-  const field = (label, opts, key) => { const id = `jh-${key}`; const s = sel(opts, j[key], { id }); s.addEventListener('change', () => { j[key] = s.value; log(j, `changed ${label.toLowerCase()} to ${s.value}`); toast(`${label} saved`, 'ok'); }); return h('label', { class: 'fld', for: id }, label, s); };
+  const field = (label, opts, key) => { const id = `jh-${key}`; const s = sel(opts, j[key], { id }); s.addEventListener('change', () => { j[key] = s.value; log(j, `changed ${label.toLowerCase()} to ${s.value}`); toast(`${label} saved`, 'ok'); refreshCalc(j); }); return h('label', { class: 'fld', for: id }, label, s); };
   const hold = h('button', { type: 'button', class: j.hold ? 'btn good' : 'btn', onclick: async () => {
     if (j.hold) { j.hold = null; log(j, 'planning resumed'); toast('Planning resumed', 'ok'); render(); return; }
     const v = await dialog(`Put job ${j.no} on hold`, [{ name: 'reason', label: 'Reason', options: HOLD, value: HOLD[0], required: true }], 'Put on hold');
@@ -508,11 +549,109 @@ function jobPage(out) {
     h('div', { class: 'row' }, h('span', { class: 'muted', style: { fontWeight: 600 } }, `Job ${j.no} · WO ${j.wo || '—'}`), stageChip(j.stage), j.hold ? h('span', { class: 'chip amber' }, `On hold: ${j.hold}`) : null,
       h('span', { class: 'spacer' }), can('planner') ? hold : null, del),
     h('h1', { style: { fontSize: '22px' } }, j.desc),
-    h('div', { class: 'row end' }, field('Stage', STAGES, 'stage'), field('Planner', PLANNERS, 'planner'), field('Unit', UNITS, 'unit'), field('Priority', PRIORITIES, 'prio')),
+    h('div', { class: 'row end' }, field('Stage', STAGES, 'stage'), field('Planner', PLANNERS, 'planner'), field('Unit', UNITS, 'unit'), field('Priority', PRIORITIES, 'prio'),
+      field('Reason for work', [{ value: '', label: '—' }, ...REASONS], 'reason')),
     h('div', { class: 'grid3', style: { gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }, id: 'readiness' }, readinessBlocks(r))));
-  const tabs = [['steps', 'Work steps'], ['materials', 'Materials'], ['review', 'Review'], ['history', 'History']];
+  const tabs = [['details', 'Details'], ['steps', 'Work steps'], ['materials', 'Materials'], ['support', 'Access & support'], ['review', 'Review'], ['history', 'History']];
   out.append(h('nav', { class: 'tabs', 'aria-label': 'Job sections', 'data-ro': true }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', 'aria-current': S.tab === k ? 'page' : null, onclick: () => { S.tab = k; render(); } }, l))));
-  ({ steps: stepsTab, materials: materialsTab, review: reviewTab, history: historyTab }[S.tab])(out, j);
+  ({ details: detailsTab, steps: stepsTab, materials: materialsTab, support: supportTab, review: reviewTab, history: historyTab }[S.tab] || detailsTab)(out, j);
+}
+
+// one job field, saved on change: type text | number | date | area | bool | select (opts)
+function jf(j, key, label, type = 'text', opts) {
+  const id = `jf-${key}`;
+  let el;
+  if (opts) el = sel([{ value: '', label: '—' }, ...opts.map((o) => (typeof o === 'string' ? { value: o, label: o } : o))], j[key], { id });
+  else if (type === 'bool') el = h('input', { id, type: 'checkbox', checked: !!j[key] });
+  else if (type === 'area') el = h('textarea', { id, rows: 2 }, j[key] || '');
+  else el = h('input', { id, type, value: j[key] ?? '', step: type === 'number' ? 'any' : null });
+  el.addEventListener('change', () => {
+    j[key] = type === 'bool' ? el.checked : type === 'number' ? (el.value === '' ? null : Number(el.value)) : el.value;
+    toast(`${label} saved`, 'ok'); refreshReadiness(j); refreshCalc(j);
+  });
+  if (type === 'bool') return h('label', { class: 'chk', for: id }, el, label);
+  return h('label', { class: `fld${type === 'area' ? ' wide' : ''}`, for: id }, label, el);
+}
+const dl = (pairs) => h('div', { class: 'form-grid', style: { gap: '10px 16px' } }, pairs.map(([l, v, hint]) => h('div', { class: 'stack', style: { gap: '2px' } },
+  h('span', { class: 'small muted', style: { fontWeight: 600 } }, l), h('span', { style: { fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: v === '—' ? 'var(--muted)' : null } }, v), hint ? h('span', { class: 'small muted' }, hint) : null)));
+function calcPairs(j) {
+  const r = readiness(j);
+  return [['Created', `${j.created} by ${j.createdBy}`], ['Priority class', priorityClass(j), 'from the reason for work'],
+    ['Planning hours', num(r.planHrs), j.estHrs != null && j.estHrs !== '' ? 'own estimate' : 'from the job size'], ['Earned planning hours', num(r.earned), 'planning hours × readiness'],
+    ['Total labor man-hours', num(r.mh), 'crew size × duration'], ['Rental equipment hours', num(r.rental), 'quantity × duration']];
+}
+function refreshCalc(j) { const box = document.getElementById('calc'); if (box) box.replaceChildren(dl(calcPairs(j))); }
+
+function detailsTab(out, j) {
+  const sapRows = [['Order type', 'order_type'], ['Notification', null], ['SAP priority', 'priority'], ['Main work center', 'main_work_ctr'], ['Planner group', 'planner_group'],
+    ['Planning plant', 'planning_plant'], ['SAP revision', 'revision'], ['Basic start', 'basic_start'], ['Basic finish', 'basic_finish'], ['System status', 'system_status'],
+    ['User status', 'user_status'], ['Entered by', null]].map(([l, k]) => [l, (k ? j.sap[k] : l === 'Notification' ? j.notification : j.originator) || '—']);
+  out.append(h('div', { class: 'grid2' },
+    h('section', { class: 'card pad stack' }, h('div', { class: 'row' }, h('h2', {}, 'Calculated'), h('span', { class: 'small muted' }, 'Updates as you plan')), h('div', { id: 'calc' }, dl(calcPairs(j)))),
+    h('section', { class: 'card pad stack' }, h('div', { class: 'row' }, h('h2', {}, 'SAP order'), h('span', { class: 'chip green' }, 'In SAP'), h('span', { class: 'small muted' }, 'Read-only; every field shows, “—” where SAP sent nothing')), dl(sapRows))));
+  out.append(h('section', { class: 'card pad stack' }, h('h2', {}, 'Job details'),
+    h('div', { class: 'form-grid' },
+      jf(j, 'wo', 'Work order'), jf(j, 'originator', 'Originator'), jf(j, 'notification', 'Notification no.'), jf(j, 'floc', 'Functional location'),
+      jf(j, 'pid', 'P&ID reference'), jf(j, 'lineNo', 'Line no.'), jf(j, 'area', 'Area (OBS)', 'text', AREAS), jf(j, 'wbs', 'Cost code (WBS)'),
+      jf(j, 'scope', 'Scope', 'text', ['Turnaround', 'Pre-turnaround', 'Post-turnaround']), jf(j, 'size', 'Job size', 'text', SIZES), jf(j, 'estHrs', 'Planning hours (own estimate)', 'number'),
+      jf(j, 'riskIndex', 'Risk index'), jf(j, 'estCost', 'Estimated cost', 'number'), jf(j, 'lockGroup', 'Lock group'),
+      jf(j, 'planStart', 'Planning start', 'date'), jf(j, 'planDone', 'Planning complete', 'date'), jf(j, 'moc', 'MOC no.'), jf(j, 'awr', 'AWR no.'), jf(j, 'changeReq', 'Change request no.'),
+      jf(j, 'capital', 'Capital project', 'bool'), jf(j, 'pkgReady', 'Package ready', 'bool'), jf(j, 'tagged', 'Tagged in field', 'bool'), jf(j, 'issued', 'Issued to contractor', 'bool'),
+      jf(j, 'details', 'Details', 'area'), jf(j, 'devNotes', 'Development notes', 'area'))));
+  // requirements with linear feet and MOC no.
+  const reqRows = REQS.map(([code, label]) => {
+    const on = !!j.reqs[code]; const r = j.reqs[code] || {};
+    const cb = h('input', { type: 'checkbox', checked: on, 'aria-label': `${label} needed` });
+    const lf = h('input', { type: 'number', value: r.lf ?? '', disabled: !on, 'aria-label': `${label} linear feet` });
+    const moc = h('input', { value: r.moc || '', disabled: !on, 'aria-label': `${label} MOC no.` });
+    cb.addEventListener('change', () => { if (cb.checked) j.reqs[code] = {}; else delete j.reqs[code]; lf.disabled = moc.disabled = !cb.checked; toast('Support needed saved', 'ok'); });
+    const upd = () => { if (!j.reqs[code]) return; j.reqs[code] = { lf: lf.value === '' ? null : Number(lf.value), moc: moc.value }; toast('Saved', 'ok'); };
+    lf.addEventListener('change', upd); moc.addEventListener('change', upd);
+    return h('tr', {}, h('td', { style: { width: '1%' } }, cb), h('td', {}, h('span', { class: 'code' }, code), ` ${label}`), h('td', {}, lf), h('td', {}, moc));
+  });
+  out.append(h('section', { class: 'card' }, h('div', { class: 'card-head' }, h('h2', {}, 'Support needed'), h('span', { class: 'small muted' }, 'Scaffolding, insulation, valve and weld details go on the Access & support tab')),
+    h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl grid', style: { minWidth: '520px' } }, h('thead', {}, h('tr', {}, ['Needed', 'Requirement', 'Linear feet', 'MOC no.'].map((x) => h('th', {}, x)))), h('tbody', {}, reqRows)))));
+  out.append(h('div', { class: 'grid2' },
+    h('section', { class: 'card pad stack' }, h('div', { class: 'row' }, h('h2', {}, 'Planning delays'), h('span', { class: 'small muted' }, 'Several can apply')),
+      h('div', { class: 'form-grid' }, DELAYS.map((d, i) => { const cb = h('input', { type: 'checkbox', id: `dl-${i}`, checked: j.delays.includes(d) });
+        cb.addEventListener('change', () => { j.delays = cb.checked ? [...j.delays, d] : j.delays.filter((x) => x !== d); toast('Delay reasons saved', 'ok'); });
+        return h('label', { class: 'chk', for: `dl-${i}` }, cb, d); })),
+      jf(j, 'delayOther', 'Other delay', 'area')),
+    h('section', { class: 'card pad stack' }, h('h2', {}, 'Safety'), jf(j, 'safetyRequired', 'Safety requirements apply', 'bool'), jf(j, 'safetyNeeds', 'Safety needs', 'area'),
+      h('div', { class: 'form-grid' }, ['Rescue plan', 'Safety plan', 'Breathing air'].map((q, i) => { const id = `sq-${i}`; const s = sel(['—', 'Yes', 'No'], '—', { id }); s.addEventListener('change', () => toast('Answer saved', 'ok')); return h('label', { class: 'fld', for: id }, q, s); })))));
+}
+
+// scaffolding, insulation, valves, welds: each with its own columns
+function supportTab(out, j) {
+  const KINDS = [
+    { key: 'scaffolds', title: 'Scaffolding', flag: ['scaffoldRequired', 'Scaffolding needed'], cols: [['location', 'Location', 'text'], ['height', 'Height (ft)', 'number'], ['length', 'Length (ft)', 'number'], ['width', 'Width (ft)', 'number'], ['levels', 'Decking levels', 'text'], ['access', 'Access', 'text'], ['needed', 'Needed by', 'date']] },
+    { key: 'insulation', title: 'Insulation, paint and tracing', flag: ['insulationRequired', 'Insulation work needed'], extra: [['insLocation', 'Location'], ['insSafety', 'Safety considerations', 'area'], ['insRemarks', 'Remarks', 'area']],
+      cols: [['spec', 'Specification', INS_SPECS], ['reason', 'Reason / hazard', INS_REASONS], ['qty', 'Qty', 'number']] },
+    { key: 'valves', title: 'Valves', cols: [['type', 'Valve type', VALVE_TYPES], ['size', 'Size', NPS], ['qty', 'Qty', 'number']] },
+    { key: 'welds', title: 'Welds', cols: [['type', 'Weld type', WELD_TYPES], ['size', 'Pipe size', NPS], ['qty', 'Qty', 'number']] },
+  ];
+  for (const k of KINDS) {
+    const rows = j[k.key];
+    const tbody = h('tbody');
+    const cellFor = (row, [f, label, t]) => {
+      const el = Array.isArray(t) ? sel(t, row[f], { 'aria-label': label, blank: '—' }) : h('input', { type: t, value: row[f] ?? '', 'aria-label': label, step: t === 'number' ? 'any' : null });
+      el.addEventListener('change', () => { row[f] = t === 'number' ? Number(el.value) || 0 : el.value; el.parentElement.classList.remove('saved'); void el.parentElement.offsetWidth; el.parentElement.classList.add('saved'); });
+      return h('td', {}, el);
+    };
+    const draw = () => {
+      tbody.replaceChildren(...(rows.length ? rows.map((row, i) => h('tr', {}, h('td', { class: 'num small muted', style: { width: '1%' } }, i + 1), k.cols.map((c) => cellFor(row, c)),
+        h('td', { style: { width: '1%' } }, can('planner') ? h('button', { type: 'button', class: 'iconbtn', 'aria-label': `Delete row ${i + 1}`, onclick: () => { rows.splice(i, 1); draw(); } }, '×') : null)))
+        : [h('tr', {}, h('td', { colspan: k.cols.length + 2, class: 'empty' }, `No ${k.title.toLowerCase()} items yet.`))]));
+      if (!can('planner')) lockViewer(tbody);
+    };
+    const add = can('planner') ? h('button', { type: 'button', class: 'btn sm', onclick: () => { rows.push({ id: nextId++, qty: 1 }); draw(); } }, '+ Add row') : null;
+    out.append(h('section', { class: 'card' },
+      h('div', { class: 'card-head' }, h('h2', {}, k.title), h('div', { class: 'row' }, k.flag ? jf(j, k.flag[0], k.flag[1], 'bool') : null, add)),
+      k.extra ? h('div', { class: 'form-grid', style: { padding: '0 20px 12px' } }, k.extra.map(([f, l, t]) => jf(j, f, l, t || 'text'))) : null,
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl grid', style: { minWidth: `${Math.max(420, k.cols.length * 120)}px` } },
+        h('thead', {}, h('tr', {}, h('th', {}, 'Item'), k.cols.map(([, l]) => h('th', {}, l)), h('th', {}, h('span', { style: { position: 'absolute', left: '-9999px' } }, 'Delete')))), tbody))));
+    draw();
+  }
 }
 function readinessBlocks(r) {
   return [['Overall readiness', r.all], ['Work steps', r.steps], ['Materials', r.mats], ['Documents', r.docs]].map(([l, v]) => h('div', { class: 'stack', style: { gap: '4px' } }, h('span', { class: 'small muted' }, l), pctBar(v, l)))
@@ -552,6 +691,11 @@ function stepsTab(out, j) {
     h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl grid', style: { minWidth: '720px' } },
       h('thead', {}, h('tr', {}, h('th', {}, h('span', { style: { position: 'absolute', left: '-9999px' } }, 'Open')), h('th', {}, 'Step'), h('th', {}, 'Work step'), h('th', {}, 'Duration (h)'), h('th', { class: 'num' }, 'Man-hours'), h('th', { class: 'num' }, 'Rental h'))), tbody))));
   draw();
+  out.append(h('section', { class: 'card pad stack' }, h('div', { class: 'row' }, h('h2', {}, 'Tools and lifting'),
+    h('span', { class: 'small muted' }, `${j.steps.length} steps · total duration ${num(j.steps.reduce((t, s) => t + (Number(s.dur) || 0), 0))} h`)),
+    h('div', { class: 'form-grid' }, jf(j, 'toolsRequired', 'Tools or rental equipment needed', 'bool'), jf(j, 'criticalLift', 'Critical lift', 'bool'),
+      jf(j, 'liftPlan', 'Critical lift plan needed', 'bool'), jf(j, 'opUnit', 'Work is in an operating unit', 'bool'), jf(j, 'obstructions', 'Obstructions in the way', 'bool'),
+      jf(j, 'liftReq', 'Lifting requirements', 'area'), jf(j, 'toolSafety', 'Safety considerations for tools and lifting', 'area'))));
 }
 function subGrids(j, s, onChange, cell) {
   const craftRows = s.crafts.map((c) => { const mh = h('td', { class: 'calc' }, num(c.dur * c.crew)); const upd = () => { mh.textContent = num((Number(c.dur) || 0) * (Number(c.crew) || 0)); onChange(); };
@@ -569,11 +713,20 @@ function subGrids(j, s, onChange, cell) {
         h('tbody', {}, toolRows.length ? toolRows : h('tr', {}, h('td', { colspan: 4, class: 'empty' }, 'No tools yet.')))))));
 }
 function materialsTab(out, j) {
+  out.append(h('section', { class: 'card pad stack' },
+    h('div', { class: 'row' }, jf(j, 'matOrdered', 'Ordered', 'bool'), jf(j, 'matReceived', 'Received', 'bool'), jf(j, 'matBagged', 'Bagged and tagged', 'bool')),
+    h('div', { class: 'form-grid' }, jf(j, 'vendor', 'Special vendor'), jf(j, 'vendorContact', 'Vendor contact'), jf(j, 'matNotes', 'Material notes', 'area'))));
+  const steps = j.steps.map((s) => ({ value: s.no, label: `${s.no} · ${s.name}` }));
   out.append(h('section', { class: 'card' }, h('div', { class: 'card-head' }, h('h2', {}, 'Material list'), h('span', { class: 'small muted' }, 'Lines with status Received count as ready; materials readiness stops at 90 % until the list is signed off')),
-    h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, ['Description', 'Qty', 'UoM', 'Status'].map((x, i) => h('th', { class: i === 1 ? 'num' : '' }, x)))),
-      h('tbody', {}, j.materials.length ? j.materials.map((m) => { const s = sel(['Ordered', 'Received', 'Back-ordered'], m.status, { 'aria-label': `Status of ${m.desc}`, class: 'inp' });
+    h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl grid', style: { minWidth: '820px' } }, h('thead', {}, h('tr', {}, ['Description', 'Qty', 'UoM', 'Status', 'Phase', 'For step', 'Do not order'].map((x, i) => h('th', { class: i === 1 ? 'num' : '' }, x)))),
+      h('tbody', {}, j.materials.length ? j.materials.map((m) => {
+        const s = sel(['Ordered', 'Received', 'Back-ordered'], m.status, { 'aria-label': `Status of ${m.desc}` });
         s.addEventListener('change', () => { m.status = s.value; refreshReadiness(j); toast('Status saved', 'ok'); });
-        return h('tr', {}, h('td', {}, m.desc), h('td', { class: 'num' }, m.qty), h('td', {}, m.uom), h('td', {}, s)); }) : h('tr', {}, h('td', { colspan: 4, class: 'empty' }, 'No materials on this job.')))))));
+        const ph = sel(BOM_PHASES, m.phase, { 'aria-label': `Phase of ${m.desc}`, blank: '—' }); ph.addEventListener('change', () => { m.phase = ph.value; toast('Phase saved', 'ok'); });
+        const st = sel(steps, m.forStep, { 'aria-label': `Step for ${m.desc}`, blank: '—' }); st.addEventListener('change', () => { m.forStep = st.value; toast('Step saved', 'ok'); });
+        const dno = h('input', { type: 'checkbox', checked: !!m.doNotOrder, 'aria-label': `Do not order ${m.desc}`, style: { width: '18px', height: '18px' } }); dno.addEventListener('change', () => { m.doNotOrder = dno.checked; toast('Saved', 'ok'); });
+        return h('tr', {}, h('td', { style: { padding: '8px 10px' } }, m.desc), h('td', { class: 'num' }, m.qty), h('td', {}, m.uom), h('td', {}, s), h('td', {}, ph), h('td', {}, st), h('td', { style: { textAlign: 'center' } }, dno)); })
+        : h('tr', {}, h('td', { colspan: 7, class: 'empty' }, 'No materials on this job.')))))));
 }
 function reviewChip(st) { return h('span', { class: `chip ${{ submitted: 'blue', approved: 'green', returned: 'red' }[st] || ''}` }, st ? st[0].toUpperCase() + st.slice(1) : 'Draft'); }
 function reviewTab(out, j) {
